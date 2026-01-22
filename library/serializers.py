@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from .models import Author, Book, Member, Loan
 from django.contrib.auth.models import User
+from django.utils import timezone
+from datetime import timedelta
 
 class AuthorSerializer(serializers.ModelSerializer):
     class Meta:
@@ -45,3 +47,23 @@ class LoanSerializer(serializers.ModelSerializer):
     class Meta:
         model = Loan
         fields = ['id', 'book', 'book_id', 'member', 'member_id', 'loan_date', 'return_date', 'is_returned']
+
+class ExtendLoanSerializer(serializers.Serializer):
+    additional_days = serializers.IntegerField(min_value=1, max_value=30, default=7)
+
+    def validate(self, attrs):
+        loan = self.context['loan']
+
+        if loan.is_returned:
+            raise serializers.ValidationError("Cannot extend a returned loan.")
+
+        if loan.due_date < timezone.localdate():
+            raise serializers.ValidationError("Cannot extend an overdue loan.")
+
+        return attrs
+
+    def save(self):
+        loan = self.context['loan']
+        loan.due_date += timedelta(days=self.validated_data['additional_days'])
+        loan.save(update_fields=['due_date'])
+        return loan

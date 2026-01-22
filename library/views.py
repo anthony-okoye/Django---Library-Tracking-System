@@ -1,10 +1,13 @@
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from .models import Author, Book, Member, Loan
-from .serializers import AuthorSerializer, BookSerializer, MemberSerializer, LoanSerializer
+from .serializers import AuthorSerializer, BookSerializer, MemberSerializer, LoanSerializer, ExtendLoanSerializer
 from rest_framework.decorators import action
 from django.utils import timezone
 from .tasks import send_loan_notification
+from django.shortcuts import get_object_or_404
+from rest_framework.pagination import PageNumberPagination
+
 
 class AuthorViewSet(viewsets.ModelViewSet):
     queryset = Author.objects.all()
@@ -13,6 +16,7 @@ class AuthorViewSet(viewsets.ModelViewSet):
 class BookViewSet(viewsets.ModelViewSet):
     queryset = Book.objects.all()
     serializer_class = BookSerializer
+    pagination_class = PageNumberPagination
 
     @action(detail=True, methods=['post'])
     def loan(self, request, pk=None):
@@ -52,3 +56,20 @@ class MemberViewSet(viewsets.ModelViewSet):
 class LoanViewSet(viewsets.ModelViewSet):
     queryset = Loan.objects.all()
     serializer_class = LoanSerializer
+
+    @action(detail=True, nethod=['post'], url_path='extend')
+    def extend_due_date(self, request, pk=None):
+        loan = self.get_object()
+
+        serializer = ExtendLoanSerializer(
+            data=request.data, 
+            context={'loan': loan}
+        )
+        serializer.is_valid(raise=True)
+        updated_loan = serializer.save()
+
+        return Response({
+            'message': 'Loan extended successfully.',
+            'new_due_date': updated_loan.due_date,
+            'loan': LoanSerializer(updated_loan).data
+        }, status=status.HTTP_200_OK)
